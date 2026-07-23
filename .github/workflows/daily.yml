@@ -1,0 +1,37 @@
+name: render-calendar
+
+# Renders device.bin once a day and commits it. The e-paper device downloads
+# this file when it wakes, so neither your Mac nor phone need to be on.
+on:
+  schedule:
+    # 00:05 Asia/Taipei == 16:05 UTC (the previous day in UTC). Adjust if you
+    # change tz in settings.json.
+    - cron: "5 16 * * *"
+  workflow_dispatch: {}   # run manually from the Actions tab any time
+
+permissions:
+  contents: write         # allow the job to commit device.bin
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install deps
+        run: pip install pillow numpy certifi
+      - name: Render device.bin
+        run: python render_cloud.py
+      - name: Commit if changed
+        run: |
+          git config user.name  "calendar-bot"
+          git config user.email "calendar-bot@users.noreply.github.com"
+          git add device.bin
+          if git diff --cached --quiet; then
+            echo "no change"
+          else
+            git commit -m "daily render $(date -u +%Y-%m-%d)"
+            git push
+          fi
