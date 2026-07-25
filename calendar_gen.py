@@ -153,23 +153,41 @@ def sky_bg(d,kind):
 def band_today(d,w,lang,now_dt=None,date=None):   # variant A: dynamic sky card
     bg,tx,ac=sky_palette(w["kind"],now_dt,date,w.get("sunrise",""),w.get("sunset","")); dark=True
     d.rectangle([0,560,480,800],fill=bg)
-    cmix(d,240,592,w["loc"],26,tx,latin=LSANSB)
-    wicon(d,100,712,w["kind"],1.45,dark)
-    ctext(d,352,690,f'{w["now"]}°',F(DEJB,92),tx)
+    cmix(d,240,586,w["loc"],22,tx,latin=LSANSB)
+    wicon(d,100,706,w["kind"],1.45,dark)
+    ctext(d,352,684,f'{w["now"]}°',F(DEJB,92),tx)
     hl=(f'高 {w["hi"]}°   低 {w["lo"]}°' if lang=="zh" else f'H {w["hi"]}°   L {w["lo"]}°')
-    cmix(d,352,750,hl,25,tx,latin=LSANSB)
-    cmix(d,352,784,w["cond"],24,ac,latin=LSANSB)
+    cmix(d,352,742,hl,25,tx,latin=LSANSB)
+    cmix(d,352,776,w["cond"],24,ac,latin=LSANSB)
 
 def band_3day(d,w,lang,now_dt=None,date=None):    # variant B: dynamic sky card
     bg,tx,ac=sky_palette(w["days"][0]["kind"],now_dt,date,w.get("sunrise",""),w.get("sunset","")); dark=True
     d.rectangle([0,560,480,800],fill=bg)
-    cmix(d,240,590,w["loc"],26,tx,latin=LSANSB)
+    cmix(d,240,584,w["loc"],22,tx,latin=LSANSB)
     for cx,day in zip([80,240,400], w["days"][:3]):
-        cmix(d,cx,626,day["wd"],27,tx,latin=LSANSB)
-        wicon(d,cx,696,day["kind"],0.8,dark)
-        cmix(d,cx,762,f'{day["hi"]}°',30,tx,latin=DEJB)
-        cmix(d,cx,790,f'{day["lo"]}°',24,ac,latin=DEJB)
-    for x in (160,320): d.line([x,618,x,794],fill=(90,120,175),width=2)
+        cmix(d,cx,620,day["wd"],27,tx,latin=LSANSB)
+        wicon(d,cx,688,day["kind"],0.8,dark)
+        cmix(d,cx,752,f'{day["hi"]}°',30,tx,latin=DEJB)
+        cmix(d,cx,780,f'{day["lo"]}°',24,ac,latin=DEJB)
+    for x in (160,320): d.line([x,612,x,786],fill=(90,120,175),width=2)
+
+# --- alert band (replaces the weather section for warnings) ---
+def _batt_icon(d,cx,cy,col):
+    w,h=104,54
+    d.rectangle([cx-w/2,cy-h/2,cx+w/2,cy+h/2],outline=col,width=6)
+    d.rectangle([cx+w/2,cy-13,cx+w/2+11,cy+13],fill=col)            # + terminal
+    d.rectangle([cx-w/2+9,cy-h/2+9,cx-w/2+25,cy+h/2-9],fill=col)    # low charge bar
+def _warn_icon(d,cx,cy,col):
+    d.polygon([(cx,cy-42),(cx-46,cy+34),(cx+46,cy+34)],outline=col,width=6)
+    d.rectangle([cx-4,cy-16,cx+4,cy+12],fill=col)                   # !
+    d.ellipse([cx-5,cy+20,cx+6,cy+31],fill=col)
+def band_alert(d,al,lang):
+    kind=al.get("kind","low")
+    bg = RED if kind=="critical" else ORANGE
+    d.rectangle([0,560,480,800],fill=bg)
+    (_warn_icon if kind=="critical" else _batt_icon)(d,108,688,CREAM)
+    cmix(d,300,668,al.get("title",""),32,CREAM,latin=LSANSB)
+    cmix(d,300,714,al.get("sub",""),25,CREAM,latin=LSANSB)
 
 def _render(theme,ctx):
     im=Image.new("RGB",(480,800),CREAM); d=ImageDraw.Draw(im)
@@ -191,9 +209,12 @@ def _render(theme,ctx):
     elif theme=="mono": wcol=BLACK; wf=LSANSB
     else: wcol=wc; wf=LSANSB
     cmix(d,240,WKY,ctx["weekday"],54,wcol,latin=wf)
-    # bottom band: quote OR weather (toggle via config)
+    # bottom band: an alert takes over the whole section; else weather; else quote
+    al=ctx.get("alert")
     w=ctx.get("weather")
-    if w:
+    if al:
+        band_alert(d,al,ctx["lang"])
+    elif w:
         fn=band_3day if ctx.get("wx_layout","3day")=="3day" else band_today
         fn(d,w,ctx["lang"],ctx.get("now_dt"),ctx.get("date"))
     else:
@@ -217,7 +238,7 @@ def _pack(land):
             data.append((IDX[px[2*j,i]]<<4)|IDX[px[2*j+1,i]])
     return bytes(data)
 
-def context(date,lang,weather=None,wx_layout="3day",now_dt=None):
+def context(date,lang,weather=None,wx_layout="3day",now_dt=None,alert=None):
     wi=date.weekday()  # Mon=0..Sun=6
     if lang=="en": header=date.strftime("%B %Y")
     elif lang=="ja": header=f"{date.year}年{date.month}月"
@@ -227,18 +248,21 @@ def context(date,lang,weather=None,wx_layout="3day",now_dt=None):
                 wcolor=(RED if wi==6 else (BLUE if wi==5 else BLACK)),
                 barcolor=(RED if wi==6 else (GREEN if wi==5 else BLACK)),
                 header=header, quote=q[0], author=q[1], lang=lang,
-                weather=weather, wx_layout=wx_layout, now_dt=now_dt, date=date)
+                weather=weather, wx_layout=wx_layout, now_dt=now_dt, date=date,
+                alert=alert)
 
 def generate(theme="retro", lang="zh", date=None, preview_path=None,
-             weather=None, wx_layout="3day", now_dt=None):
+             weather=None, wx_layout="3day", now_dt=None, alert=None):
     """Return packed 192000-byte buffer for the given date (default: today).
     If weather is a dict, the bottom band shows weather instead of the quote.
-    now_dt (default: now) drives the golden-hour orange sky near sunrise/sunset."""
+    now_dt (default: now) drives the golden-hour orange sky near sunrise/sunset.
+    alert: optional dict {kind: 'low'|'critical', title, sub} -> the bottom band
+    becomes a full-width warning card (battery icon / warning triangle + message)."""
     date = date or datetime.date.today()
     now_dt = now_dt or datetime.datetime.now()
-    raw = _render(theme, context(date, lang, weather, wx_layout, now_dt))
+    raw = _render(theme, context(date, lang, weather, wx_layout, now_dt, alert))
     im = _dither(raw)                                  # spread dither (nice date edges)
-    if weather:                                        # crisp solid weather card
+    if weather or alert:                               # crisp solid bottom card
         band = _dither(raw.crop((0,560,480,800)), spread=0)
         im.paste(band, (0,560))
     if preview_path: im.save(preview_path)

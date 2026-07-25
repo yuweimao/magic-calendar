@@ -33,12 +33,32 @@ def main():
             print("weather fetch failed -> rendering quote instead")
     print("date:", date, "| weather source:", weather["source"] if weather else "(quote)")
 
-    data = calendar_gen.generate(cfg.get("theme", "retro"), lang, date=date,
-                                 weather=weather, wx_layout=cfg.get("wx_layout", "3day"),
-                                 now_dt=now_naive)
+    theme = cfg.get("theme", "retro"); layout = cfg.get("wx_layout", "3day")
+    def render(alert=None):
+        return calendar_gen.generate(theme, lang, date=date, weather=weather,
+                                     wx_layout=layout, now_dt=now_naive, alert=alert)
+
+    # normal image
     with open("device.bin", "wb") as f:
-        f.write(data)
-    print(f"wrote device.bin ({len(data)} bytes)")
+        f.write(render())
+    print("wrote device.bin")
+
+    # alert variants — the whole bottom band becomes a warning card. The device
+    # fetches one of these when it detects a condition. Add more here anytime
+    # (free on the tier); the firmware picks which by measurement.
+    L = lambda m: m.get(lang, m["en"])
+    ALERTS = {
+        "low": {"kind": "low",
+                "title": L({"en": "Battery low", "zh": "電量偏低", "ja": "電池残量低下"}),
+                "sub":   L({"en": "please charge soon", "zh": "請盡快充電", "ja": "充電してください"})},
+        "critical": {"kind": "critical",
+                "title": L({"en": "Battery critical", "zh": "電量過低", "ja": "電池残量わずか"}),
+                "sub":   L({"en": "charge now", "zh": "請立即充電", "ja": "今すぐ充電"})},
+    }
+    for key, al in ALERTS.items():
+        with open(f"device_{key}.bin", "wb") as f:
+            f.write(render(alert=al))
+        print(f"wrote device_{key}.bin")
 
 if __name__ == "__main__":
     main()

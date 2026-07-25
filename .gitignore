@@ -5,6 +5,7 @@ preview.png
 _tmp.png
 wx_*.png
 weather_*.png
+*_preview.png
 cal_*.bin
 # keep device.bin — it's the file the device downloads
 !device.bin
