@@ -1,11 +1,7 @@
 __pycache__/
 *.pyc
-# local preview/mockup renders (not needed in the repo)
-preview.png
-_tmp.png
-wx_*.png
-weather_*.png
-*_preview.png
+# no PNGs belong in the repo (device reads .bin); ignore all test renders
+*.png
 cal_*.bin
 # keep device.bin — it's the file the device downloads
 !device.bin
